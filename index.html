@@ -90,6 +90,9 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .mis .n{font-family:var(--f-display);font-size:16px}
 .mis .d{font-size:12.5px;color:var(--dim)}
 .mis .rw{font-size:12.5px;color:var(--gold);white-space:nowrap;text-align:right}
+.mis .up{padding:7px 12px;border-radius:8px;background:var(--seal);color:var(--paper-2);font-size:13px;white-space:nowrap}
+.mis .up:disabled{background:var(--desk-3);color:var(--dim)}
+.lvdots{color:var(--gold);letter-spacing:2px;font-size:12px}
 .campinfo{font-size:13px;color:#d6cab0;margin:0 0 12px}
 .ibtn{flex:none;min-width:44px;height:44px;padding:0 10px;border-radius:9px;background:var(--desk-2);border:1px solid var(--line);font-family:var(--f-display);font-size:16px;letter-spacing:.04em}
 .ibtn:hover{border-color:var(--dim)}
@@ -239,7 +242,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
     </main>
     <div class="camp-row" id="campRow"><canvas id="campCv" aria-label="軍營：抽到的字先放這裏"></canvas></div>
     <footer class="bar bottom">
-      <button type="button" class="ibtn" id="codexBtn" aria-label="詞譜與羈絆">譜</button>
+      <button type="button" class="ibtn" id="specBtn" aria-label="特技：仁王盾等">技</button>
       <button type="button" class="ibtn" id="missionBtn">任務</button>
       <button type="button" class="draw" id="drawBtn">抽五字<small id="drawCost">3 包</small></button>
       <button type="button" class="ibtn" id="rushBtn" title="立即開下一波，得 1 包">催戰</button>
@@ -262,12 +265,15 @@ const SCENES=[
  {id:'yiling',name:'夷陵',sub:'七百里連營',wp:[[3,-0.7],[3,2],[0,2],[0,5],[6,5],[6,8],[2,8],[2,10]],paper:'#dfe4cf',path:'34,52,30',deco:'trees',foe:['卒','舟','盾','精'],boss:['韓當','朱然','潘璋'],flag:'吳',foeCol:'#5a1e16',mod:'fire',modText:'火系傷害 +30%'},
  {id:'huangjin',name:'黃巾',sub:'蒼天已死，黃天當立',wp:[[0,-0.7],[0,1],[6,1],[6,3],[1,3],[1,9],[4,9],[4,6],[6,6],[6,10]],paper:'#ecdda8',path:'90,62,20',deco:'flags',foe:['賊','馬','盾','精'],boss:['張寶','張梁','張角'],flag:'黃',foeCol:'#6d5212',mod:'swarm',modText:'敵軍更多但較弱'},
 ];
-let COLS=7,ROWS=11,N=77,SEG=[],PATH_LEN=0,PATHSET=new Set(),WPS=[];
-function setupPath(wp,land){
+let COLS=7,ROWS=11,N=77,SEG=[],PATH_LEN=0,PATHSET=new Set(),BLOCK=new Set(),WPS=[];
+function seeded(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function isFree(i){return !PATHSET.has(i)&&!BLOCK.has(i);}
+function setupPath(wp,land,sid){
  WPS=land?wp.map(([x,y])=>[y,x]):wp.map(p=>p.slice());COLS=land?11:7;ROWS=land?7:11;N=COLS*ROWS;SEG=[];PATH_LEN=0;
  for(let i=0;i<WPS.length-1;i++){const [x1,y1]=WPS[i],[x2,y2]=WPS[i+1];const L=Math.hypot(x2-x1,y2-y1);SEG.push({x1,y1,x2,y2,L,s:PATH_LEN});PATH_LEN+=L;}
- PATHSET=new Set();
+ PATHSET=new Set();BLOCK=new Set();
  for(const g of SEG){if(g.x1===g.x2){for(let y=Math.ceil(Math.min(g.y1,g.y2));y<=Math.floor(Math.max(g.y1,g.y2));y++)if(y>=0)PATHSET.add(y*COLS+g.x1);}else{for(let x=Math.ceil(Math.min(g.x1,g.x2));x<=Math.floor(Math.max(g.x1,g.x2));x++)if(x>=0)PATHSET.add(g.y1*COLS+x);}}
+ {const R=seeded((sid||'x').split('').reduce((h,c)=>h*31+c.charCodeAt(0),7));const pc=[];for(let r=0;r<11;r++)for(let c=0;c<7;c++){const i=land?c*COLS+r:r*COLS+c;if(!PATHSET.has(i))pc.push(i);}let n=0,guard=0;while(n<8&&guard++<200){const i=pc[Math.floor(R()*pc.length)];if(!BLOCK.has(i)){BLOCK.add(i);n++;}}}
 }
 function posAt(d){d=Math.max(0,Math.min(PATH_LEN,d));for(const g of SEG){if(d<=g.s+g.L){const k=(d-g.s)/g.L;return {x:g.x1+(g.x2-g.x1)*k+.5,y:g.y1+(g.y2-g.y1)*k+.5};}}const g=SEG[SEG.length-1];return {x:g.x2+.5,y:g.y2+.5};}
 
@@ -367,25 +373,30 @@ const MISSIONS=[
  {id:'boss',name:'陣斬首領',desc:'斬殺一名敵方首領',camp:0,bao:3,test:b=>b.bossKills>0},
  {id:'wave',name:'堅守八波',desc:'撐到第 9 波',camp:0,bao:3,test:b=>G.wave>=9},
 ];
-function baseHp(w){return 55*Math.pow(1.3,w-1);}
+function baseHp(w){return 50*Math.pow(1.28,w-1);}
 
 const HOOK={toast(){},refresh(){},end(){},word(){},send(){},skill(){},mission(){}};
 const G={t:0,wave:0,nextAt:12,maxWave:15,gap:25,speed:1,paused:false,running:false,over:false,result:null,diff:'中',aiTimer:1,me:null,ai:null,autoMe:null,scene:SCENES[0],land:false,sceneIdx:0};
 let UID=0;
 function newTower(key,lv){return {key,lv,cd:.4,sk:null,gt:0,id:++UID,pop:.45,spd:false,kurou:false,atkT:9,adx:0,ady:-1,rageT:0,fastT:0};}
-function isWordish(t){return t&&(t.key.length===1||DEF[t.key].cat==='part');}
+function isWordish(t){return !!t&&t.key.length===1;}
+function udef(t){return t.link?DEF[t.link.w]:DEF[t.key];}
+function isHead(t){return !t.link||t.link.pos===0;}
+const SHARE={2:.8,3:.7};
+const SPECIALS={shield:{name:'仁王盾',cd:22,max:5,cost:[0,0,4,5,6,7],desc:lv=>`敵軍逼近阿斗時自動舉盾，把阿斗附近的敵軍推後 ${3+lv-1} 秒`},drum:{name:'戰鼓',cd:30,max:5,cost:[0,4,4,5,6,7],desc:lv=>`每 30 秒擂鼓，全軍攻速 +30%，持續 ${4+lv} 秒`},logs:{name:'滾木',cd:20,max:5,cost:[0,4,4,5,6,7],desc:lv=>`每 20 秒從阿斗處滾木沿路撞向敵軍，各受 ${15+5*(lv-1)}% 一般敵兵血量傷害`}};
+function specCost(b,k){const S=SPECIALS[k],lv=b.spec[k].lv;return lv>=S.max?null:S.cost[lv+1];}
 
 class Board{
  constructor(name,isAI,deck){
   this.name=name;this.isAI=isAI;this.cells=new Array(N).fill(null);this.camp=new Array(CAMP_MAX).fill(null);this.campCap=CAMP_START;
   this.enemies=[];this.fx=[];this.proj=[];this.corpses=[];this.queue=[];
-  this.hp=20;this.maxHp=20;this.bao=START_BAO;this.kills=0;this.kc=0;this.bossKills=0;this.discards=0;this.sendCount=0;this.sets=new Set();this.windT=0;this.rallyT=0;this.banner=null;this.found=new Set();this.shake=0;this.opp=null;this.done=new Set();
+  this.hp=20;this.maxHp=20;this.bao=START_BAO;this.kills=0;this.kc=0;this.bossKills=0;this.discards=0;this.sendCount=0;this.sets=new Set();this.windT=0;this.rallyT=0;this.banner=null;this.found=new Set();this.shake=0;this.opp=null;this.done=new Set();this.sig=new Set();this.spec={shield:{lv:1,cd:0},drum:{lv:0,cd:0},logs:{lv:0,cd:0}};this.drumT=0;
   this.deck=deck.map(d=>d.h);this.loadout={};for(const d of deck)this.loadout[d.h]={weapon:d.w||null,stars:d.stars||1};
   this.avail=new Set([...this.deck,...PLOYS,...SQUADS]);this.parts=new Set();for(const w of this.avail)if(w.length===3){this.parts.add(w.slice(0,2));this.parts.add(w.slice(1));}
   const P=[['兵',4],['弓',3],['槍',3],['火',2],['水',2],['金',1.5],['騎',1.5]];for(const h of this.deck)for(const c of h)P.push([c,1.8]);for(const c of PLOY_CHARS)P.push([c,.5]);
   this.pool=P;this.poolSum=P.reduce((s,p)=>s+p[1],0);
  }
- empties(){const r=[];for(let i=0;i<N;i++)if(!PATHSET.has(i)&&!this.cells[i])r.push(i);return r;}
+ empties(){const r=[];for(let i=0;i<N;i++)if(isFree(i)&&!this.cells[i])r.push(i);return r;}
  campFree(){let n=0;for(let i=0;i<this.campCap;i++)if(!this.camp[i])n++;return n;}
  all(){return this.cells.concat(this.camp).filter(Boolean);}
  pick(){
@@ -396,63 +407,57 @@ class Board{
  draw(free){if(!free&&!this.canDraw())return 0;if(!free)this.bao-=DRAW_COST;let n=0;for(let i=0;i<this.campCap&&n<DRAW_N;i++)if(!this.camp[i]){this.camp[i]=newTower(this.pick(),1);n++;}this.refresh();return n;}
  get(l){return l.z==='b'?this.cells[l.i]:this.camp[l.i];}
  put(l,t){if(l.z==='b')this.cells[l.i]=t;else this.camp[l.i]=t;}
- valid(l){return l.z==='b'?(l.i>=0&&l.i<N&&!PATHSET.has(l.i)):(l.i>=0&&l.i<this.campCap);}
+ valid(l){return l.z==='b'?(l.i>=0&&l.i<N&&isFree(l.i)):(l.i>=0&&l.i<this.campCap);}
  /* move a unit between board (z:'b') and camp (z:'c'); merges, swaps and auto-links */
  move(src,dst,dry){
   if(src.z===dst.z&&src.i===dst.i)return null;if(!this.valid(dst))return null;const a=this.get(src);if(!a)return null;const b=this.get(dst);
   let res,made=null;
-  if(!b){res='move';}
-  else{const r=mergeResult(this,a,b);if(r){made=r;res=(r.key===b.key)?'up':(DEF[r.key].cat==='part'?'part':'word');}else res='swap';}
-  if(dry){if(res==='move'&&dst.z==='b'){this.cells[dst.i]=a;if(src.z==='b')this.cells[src.i]=null;const f=this.findLink(dst.i);this.cells[dst.i]=null;if(src.z==='b')this.cells[src.i]=a;return f?{res:'link',key:f.s}:null;}return (res==='up'||res==='word'||res==='part')?{res,key:made.key}:null;}
-  if(res==='move'){this.put(dst,a);this.put(src,null);}
-  else if(res==='swap'){this.put(dst,a);this.put(src,b);}
-  else{this.put(dst,made);this.put(src,null);if(res==='word'){this.found.add(made.key);HOOK.word(this,made,dst);}}
-  let linked=null;if(dst.z==='b')linked=this.linkAt(dst.i);if(res==='swap'&&src.z==='b'&&!linked)linked=this.linkAt(src.i);
-  this.refresh();return linked?'link':res;
+  if(!b)res='move';else{const r=mergeResult(this,a,b);if(r){made=r;res='up';}else res='swap';}
+  if(dry){const sc=this.cells.slice(),sk=this.camp.slice(),tiles=this.all(),saved=tiles.map(t=>t.link),sig=this.sig;
+   if(res==='move'){this.put(dst,a);this.put(src,null);}else if(res==='swap'){this.put(dst,a);this.put(src,b);}else{this.put(dst,made);this.put(src,null);}
+   const nl=this.computeLinks(true);this.cells=sc;this.camp=sk;tiles.forEach((t,i)=>t.link=saved[i]);this.sig=sig;
+   const mine=dst.z==='b'?nl.find(L=>L.idx.includes(dst.i)):null;if(mine)return {res:'link',key:mine.w};return res==='up'?{res:'up',key:made.key}:null;}
+  if(res==='move'){this.put(dst,a);this.put(src,null);}else if(res==='swap'){this.put(dst,a);this.put(src,b);}else{this.put(dst,made);this.put(src,null);}
+  const nl=this.refresh();return nl.length?'link':res;
  }
- findLink(i){const t=this.cells[i];if(!isWordish(t))return null;const r=Math.floor(i/COLS),c=i%COLS;let best=null;
-  for(const [dc,dr] of [[1,0],[0,1]])for(let st=-2;st<=0;st++)for(let len=2;len<=3;len++){if(st+len-1<0)continue;const idx=[];let ok=true;
-   for(let k=0;k<len;k++){const cc=c+dc*(st+k),rr=r+dr*(st+k);if(cc<0||cc>=COLS||rr<0||rr>=ROWS){ok=false;break;}const j=rr*COLS+cc,u=this.cells[j];if(!isWordish(u)){ok=false;break;}idx.push(j);}
-   if(!ok)continue;const s=idx.map(j=>this.cells[j].key).join('');if(this.avail.has(s)&&(!best||s.length>best.s.length))best={s,idx};}
-  return best;}
- linkAt(i){const f=this.findLink(i);if(!f)return null;const lv=Math.max(...f.idx.map(j=>this.cells[j].lv));for(const j of f.idx)this.cells[j]=null;const head=f.idx[0];const t=newTower(f.s,lv);this.cells[head]=t;this.found.add(f.s);HOOK.word(this,t,{z:'b',i:head},f.idx);return f.s;}
+ /* scan the board for words read left-to-right or top-to-bottom; each char stays in its own cell */
+ computeLinks(dry){const C=this.cells;const old=this.sig||new Set();const links=[];const used=new Set();
+  for(const len of [3,2])for(let i=0;i<N;i++)for(const [dc,dr] of [[1,0],[0,1]]){const c=i%COLS,r=(i/COLS|0);if(c+dc*(len-1)>=COLS||r+dr*(len-1)>=ROWS)continue;const idx=[];let ok=true;
+   for(let k=0;k<len;k++){const j=(r+dr*k)*COLS+(c+dc*k);if(!C[j]||used.has(j)){ok=false;break;}idx.push(j);}if(!ok)continue;const w=idx.map(j=>C[j].key).join('');if(this.avail.has(w)){idx.forEach(j=>used.add(j));links.push({w,idx});}}
+  if(!dry){for(const t of this.all())t.link=null;for(const t of this.camp)if(t)t.link=null;}
+  const sig=new Set(),fresh=[];for(const L of links){const key=L.w+'@'+L.idx.join(',');sig.add(key);L.idx.forEach((j,pos)=>{if(C[j])C[j].link={w:L.w,idx:L.idx,pos};});if(!old.has(key))fresh.push(L);}
+  if(!dry){for(const L of links){const head=C[L.idx[0]];const key=L.w+'@'+L.idx.join(',');if(!old.has(key)){head.sk=null;}}this.sig=sig;}
+  return fresh;}
  discard(ci){const t=this.camp[ci];if(!t)return false;this.camp[ci]=null;this.discards+=t.lv;let g=0;while(this.discards>=3){this.discards-=3;this.bao++;g++;}this.refresh();return g;}
  stow(i){for(let k=0;k<this.campCap;k++)if(!this.camp[k]){return this.move({z:'b',i},{z:'c',i:k});}return null;}
+ upgradeSpec(k){const c=specCost(this,k);if(c==null||this.bao<c)return false;this.bao-=c;this.spec[k].lv++;return true;}
  checkMissions(){for(const m of MISSIONS){if(this.done.has(m.id))continue;if(m.test(this)){this.done.add(m.id);this.bao+=m.bao;if(m.camp)this.campCap=Math.min(CAMP_MAX,this.campCap+m.camp);HOOK.mission(this,m);}}}
- refresh(){const keys=new Set(this.cells.filter(Boolean).map(t=>t.key));this.sets=new Set(SETS.filter(s=>s.need.every(k=>keys.has(k))).map(s=>s.name));HOOK.refresh(this);}
+ refresh(){const fresh=this.computeLinks(false);const keys=new Set();for(const t of this.cells)if(t)keys.add(t.link?t.link.w:t.key);this.sets=new Set(SETS.filter(s=>s.need.every(k=>keys.has(k))).map(s=>s.name));for(const L of fresh){this.found.add(L.w);HOOK.word(this,L.w,L.idx);}HOOK.refresh(this);return fresh;}
 }
-function mergeResult(b,a,c){
- if(!a||!c)return null;
- if(a.key===c.key&&a.lv===c.lv&&a.lv<5)return newTower(a.key,a.lv+1);
- if(isWordish(a)&&isWordish(c)&&a.key.length+c.key.length<=3){
-  const lv=Math.max(a.lv,c.lv);for(const s of [c.key+a.key,a.key+c.key])if(b.avail.has(s))return newTower(s,lv);
-  for(const s of [c.key+a.key,a.key+c.key])if(b.parts.has(s))return newTower(s,lv);
- }
- return null;
-}
+function mergeResult(b,a,c){if(!a||!c)return null;if(a.key===c.key&&a.lv===c.lv&&a.lv<5)return newTower(a.key,a.lv+1);return null;}
 const TAOYUAN=['劉備','關羽','張飛'];
 function isArrow(D){return D.fx==='arrow'||D.fx==='bolt';}
 function stats(b,t){
- const D=DEF[t.key],lm=1+.85*(t.lv-1);let dmg=D.dmg*lm,rate=D.rate,range=D.range>50?99:D.range+(D.range>0?.12*(t.lv-1):0),cdMul=1,multi=D.multi,splash=D.splash;const S=b.sets;
- if(D.cat==='hero'){const L=b.loadout[t.key]||{};dmg*=1+.12*((L.stars||1)-1);const W=L.weapon&&WDEF[L.weapon];if(W){dmg*=1+W.dmg;rate*=1+W.rate;if(range<50)range+=W.range;if(W.owner===t.key){dmg*=1.6;rate*=1.15;cdMul=.8;}}}
+ const D=udef(t),hk=D.key,lm=1+.85*(t.lv-1);let dmg=D.dmg*lm*(t.link?SHARE[t.link.idx.length]:1),rate=D.rate,range=D.range>50?99:D.range+(D.range>0?.12*(t.lv-1):0),cdMul=1,multi=D.multi,splash=D.splash;const S=b.sets;
+ if(D.cat==='hero'){const L=b.loadout[t.key]||{};dmg*=1+.12*((L.stars||1)-1);const W=L.weapon&&WDEF[L.weapon];if(W){dmg*=1+W.dmg;rate*=1+W.rate;if(range<50)range+=W.range;if(W.owner===hk){dmg*=1.6;rate*=1.15;cdMul=.8;}}}
  if(S.has('五虎上將'))dmg*=1.25;
- if(S.has('桃園結義')&&TAOYUAN.includes(t.key))dmg*=1.4;
- if(S.has('鳳儀亭')&&t.key==='呂布')dmg*=1.6;
+ if(S.has('桃園結義')&&TAOYUAN.includes(hk))dmg*=1.4;
+ if(S.has('鳳儀亭')&&hk==='呂布')dmg*=1.6;
  if(S.has('草船借箭')&&isArrow(D))dmg*=1.35;
  if(S.has('周瑜打黃蓋')&&D.burn)dmg*=1.4;
  if(S.has('魏武揮鞭')&&D.fac==='魏')dmg*=1.3;
- if(S.has('虎癡惡來')&&(t.key==='典韋'||t.key==='許褚'))dmg*=1.4;
- if(S.has('五丈原')&&(t.key==='諸葛亮'||t.key==='司馬懿'))dmg*=1.3;
+ if(S.has('虎癡惡來')&&(hk==='典韋'||hk==='許褚'))dmg*=1.4;
+ if(S.has('五丈原')&&(hk==='諸葛亮'||hk==='司馬懿'))dmg*=1.3;
  if(S.has('白衣渡江')&&D.fac==='吳')dmg*=1.2;
  if(S.has('江東雙璧')&&D.fac==='吳')rate*=1.2;
  if(S.has('三顧茅廬'))rate*=1.15;
- if(S.has('弓腰姬')&&t.key==='孫尚香')multi=3;
+ if(S.has('弓腰姬')&&hk==='孫尚香')multi=3;
  if(G.scene.mod==='fire'&&D.burn)dmg*=1.3;
  if(b.rallyT>0)dmg*=1.4;if(t.rageT>0)dmg*=2;if(t.kurou)dmg*=1.3;
- if(t.fastT>0)rate*=2;if(t.spd)rate*=1.3;if(b.windT>0)rate*=2;
+ if(t.fastT>0)rate*=2;if(b.drumT>0)rate*=1.3;if(t.spd)rate*=1.3;if(b.windT>0)rate*=2;
  return {dmg,rate,range,lm,cdMul,multi,splash};
 }
-function skillCd(b,t){const D=DEF[t.key];let cd=D.skill.cd*stats(b,t).cdMul;if(t.key==='趙雲'&&b.sets.has('長坂坡'))cd*=.5;if(t.key==='張遼'&&b.sets.has('合肥之戰'))cd*=.5;return Math.round(cd*10)/10;}
+function skillCd(b,t){const D=udef(t);let cd=D.skill.cd*stats(b,t).cdMul;if(D.key==='趙雲'&&b.sets.has('長坂坡'))cd*=.5;if(D.key==='張遼'&&b.sets.has('合肥之戰'))cd*=.5;return Math.round(cd*10)/10;}
 function addFx(b,f){b.fx.push(f);if(b.fx.length>320)b.fx.splice(0,b.fx.length-320);}
 
 function spawn(b,role,w,bossIdx){
@@ -460,7 +465,7 @@ function spawn(b,role,w,bossIdx){
  if(bossIdx!=null){T=EBOSS[bossIdx];label=sc.boss[bossIdx];}else{T=EROLE[role];label=sc.foe[role];}
  let hp=baseHp(w)*T.hp;if(sc.mod==='swarm')hp*=.8;let armor=T.armor;if(sc.mod==='armor')armor=Math.min(.6,armor+.1);
  const p=posAt(0);
- b.enemies.push({id:++UID,label,role,d:0,x:p.x,y:p.y,hp,maxHp:hp,spd:T.spd*1.15,armor,leak:T.leak,reward:bossIdx!=null?3:(role===3?1:0),boss:bossIdx!=null,slowT:0,slowF:0,stunT:0,burnT:0,burnDps:0,charmT:0,aura:0,vuln:0,flash:0,kb:0,dead:false});
+ b.enemies.push({id:++UID,label,role,d:0,x:p.x,y:p.y,hp,maxHp:hp,spd:T.spd*1.15,armor,leak:T.leak,reward:bossIdx!=null?3:(role===3?1:0),boss:bossIdx!=null,slowT:0,slowF:0,stunT:0,burnT:0,burnDps:0,charmT:0,pushT:0,aura:0,vuln:0,flash:0,kb:0,dead:false});
 }
 function waveSpec(w){
  let n=6+Math.floor(w*1.8);if(G.scene.mod==='swarm')n=Math.round(n*1.3);const L=[];
@@ -475,7 +480,7 @@ function startWave(){
  const bi=G.wave%5===0?G.wave/5-1:null;HOOK.toast(bi!=null?`第 ${G.wave} 波：${G.scene.boss[bi]}親率來襲`:`第 ${G.wave} 波敵軍殺到`,bi!=null?'':'i');
 }
 function newGame(o){
- G.scene=SCENES[o.scene];G.sceneIdx=o.scene;G.land=!!o.land;setupPath(G.scene.wp,G.land);
+ G.scene=SCENES[o.scene];G.sceneIdx=o.scene;G.land=!!o.land;setupPath(G.scene.wp,G.land,G.scene.id);
  G.t=0;G.wave=0;G.nextAt=12;G.over=false;G.result=null;G.diff=o.diff;G.aiTimer=1.5;G.paused=false;
  G.me=new Board('你',false,o.meDeck);G.ai=new Board('電腦',true,o.aiDeck);G.me.opp=G.ai;G.ai.opp=G.me;
  for(const b of [G.me,G.ai]){const em=b.empties();const ks=['兵','弓'];[.3,.65].forEach((f,k)=>{b.cells[em[Math.floor(em.length*f)]]=newTower(ks[k],1);});b.draw(true);}
@@ -521,11 +526,11 @@ function tickProj(b,dt){
 }
 function banner(b,text,color){b.banner={text,life:1.4,max:1.4,color:color||'#c3372b'};HOOK.skill(b,text);}
 function castSkill(b,t,cx,cy,st){
- const D=DEF[t.key],E=b.enemies.filter(e=>!e.dead&&e.hp>0),near=r=>E.filter(e=>Math.hypot(e.x-cx,e.y-cy)<=r),col=D.rar?rarCol(D.rar):'#2e4a6c';
+ const D=udef(t),E=b.enemies.filter(e=>!e.dead&&e.hp>0),near=r=>E.filter(e=>Math.hypot(e.x-cx,e.y-cy)<=r),col=D.rar?rarCol(D.rar):'#2e4a6c';
  const showDmg=(e,v)=>addFx(b,{type:'text',x:e.x,y:e.y-.4,str:Math.round(v)+'',color:col,size:.36,life:.9,max:.9});
  t.atkT=0;
  switch(D.skill.id){
-  case 'dash':{if(!E.length)return false;for(const e of E)hit(b,e,st.dmg*3,null,st);addFx(b,{type:'dash',key:t.key,life:.9,max:.9});banner(b,'七進七出',col);return true;}
+  case 'dash':{if(!E.length)return false;for(const e of E)hit(b,e,st.dmg*3,null,st);addFx(b,{type:'dash',key:D.key,life:.9,max:.9});banner(b,'七進七出',col);return true;}
   case 'execute':{const R=near(st.range+.6);if(!R.length)return false;R.sort((p,q)=>q.hp-p.hp);const e=R[0];showDmg(e,hit(b,e,st.dmg*8,{ap:true},st));addFx(b,{type:'bigslash',x:e.x,y:e.y,life:.5,max:.5,color:col});banner(b,'青龍偃月',col);return true;}
   case 'musou':{const R=near(st.range+.5);if(!R.length)return false;R.forEach(e=>hit(b,e,st.dmg*4,null,st));addFx(b,{type:'ring',x:cx,y:cy,r0:.3,r1:st.range+.5,color:col,life:.5,max:.5,w:.14});banner(b,'天下無雙',col);return true;}
   case 'roar':{const R=near(3);if(!R.length)return false;const ex=b.sets.has('長坂坡')?1:0;R.forEach(e=>e.stunT=Math.max(e.stunT,(e.boss?1:2)+ex));addFx(b,{type:'ring',x:cx,y:cy,r0:.3,r1:3,color:'#1b1815',life:.6,max:.6,w:.12});banner(b,'喝斷長坂橋',col);return true;}
@@ -546,6 +551,13 @@ function castSkill(b,t,cx,cy,st){
  }
  return false;
 }
+function tickSpecials(b,dt){
+ if(b.drumT>0)b.drumT-=dt;const E=b.enemies.filter(e=>!e.dead&&e.hp>0);const bp=WPS[WPS.length-1];
+ for(const k in b.spec){const sp=b.spec[k];if(sp.lv<=0)continue;if(sp.cd>0){sp.cd-=dt;continue;}
+  if(k==='shield'){if(E.some(e=>e.d>=PATH_LEN-2.6)){const dur=3+sp.lv-1;let n=0;for(const e of E)if(e.d>=PATH_LEN-5){e.pushT=Math.max(e.pushT,e.boss?dur*.5:dur);e.charmT=0;n++;}sp.cd=SPECIALS.shield.cd;addFx(b,{type:'shield',x:bp[0]+.5,y:bp[1]+.5,life:1.2,max:1.2});banner(b,'仁王盾','#e8b23a');}}
+  else if(k==='drum'){if(E.length>=3){b.drumT=4+sp.lv;sp.cd=SPECIALS.drum.cd;banner(b,'擂鼓','#c3372b');addFx(b,{type:'drum',life:.9,max:.9});}}
+  else if(k==='logs'){if(E.length){const dm=baseHp(Math.max(1,G.wave))*(.15+.05*(sp.lv-1));for(const e of E)hit(b,e,dm,null,{lm:1});sp.cd=SPECIALS.logs.cd;addFx(b,{type:'logs',life:1,max:1});banner(b,'滾木','#6b4a2a');}}}
+}
 function tickBoard(b,dt){
  if(b.queue.length){const due=[];b.queue=b.queue.filter(q=>{if(G.t>=q.at){due.push(q);return false;}return true;});due.forEach(q=>spawn(b,q.role,q.w,q.boss));}
  if(b.windT>0)b.windT-=dt;if(b.rallyT>0)b.rallyT-=dt;if(b.shake>0)b.shake-=dt;
@@ -553,23 +565,25 @@ function tickBoard(b,dt){
  const cells=b.cells;
  for(let i=0;i<N;i++){const t=cells[i];if(t){t.spd=false;t.kurou=false;t.atkT+=dt;if(t.pop>0)t.pop=Math.max(0,t.pop-dt*2.5);if(t.rageT>0)t.rageT-=dt;if(t.fastT>0)t.fastT-=dt;}}
  for(const e of b.enemies){e.aura=0;e.vuln=0;}
- for(let i=0;i<N;i++){const t=cells[i];if(!t)continue;const A=DEF[t.key].aura;if(!A)continue;const cx=i%COLS,cy=(i/COLS|0);
+ for(let i=0;i<N;i++){const t=cells[i];if(!t||!isHead(t))continue;const A=udef(t).aura;if(!A)continue;const cx=i%COLS,cy=(i/COLS|0);
   if(A==='speed'||A==='kurou'){for(let j=0;j<N;j++){const u=cells[j];if(u&&j!==i&&Math.hypot(j%COLS-cx,(j/COLS|0)-cy)<=1.5){if(A==='speed')u.spd=true;else u.kurou=true;}}}
   else{const st=stats(b,t);for(const e of b.enemies){if(Math.hypot(e.x-cx-.5,e.y-cy-.5)<=st.range){if(A==='slow')e.aura=Math.max(e.aura,Math.min(.6,.41+.04*t.lv));else e.vuln=Math.max(e.vuln,.25+.03*(t.lv-1));}}}}
+ tickSpecials(b,dt);
  const burnMul=b.sets.has('赤壁之戰')?2:1;const base=WPS[WPS.length-1];
  for(const e of b.enemies){
   if(e.flash>0)e.flash-=dt;if(e.kb>0)e.kb-=dt;
   if(e.burnT>0){e.burnT-=dt;e.hp-=e.burnDps*burnMul*dt;if(e.burnT<=0)e.burnDps=0;}
   if(e.slowT>0){e.slowT-=dt;if(e.slowT<=0)e.slowF=0;}
   if(e.stunT>0)e.stunT-=dt;
+  else if(e.pushT>0){e.pushT-=dt;e.d=Math.max(0,e.d-Math.max(.9,e.spd)*1.1*dt);}
   else if(e.charmT>0){e.charmT-=dt;e.d=Math.max(0,e.d-e.spd*.6*dt);}
   else{const sl=Math.max(e.slowT>0?e.slowF:0,e.aura);e.d+=e.spd*(1-sl)*dt;}
   const p=posAt(e.d);e.x=p.x;e.y=p.y;
   if(e.d>=PATH_LEN&&e.hp>0&&!e.dead){e.dead=true;e.leaked=true;b.hp=Math.max(0,b.hp-e.leak);b.shake=.3;addFx(b,{type:'text',x:base[0]+.5,y:base[1]+.1,str:'−'+e.leak,color:'#c3372b',size:.5,life:1,max:1});}
  }
- for(let i=0;i<N;i++){const t=cells[i];if(!t)continue;const D=DEF[t.key],st=stats(b,t),cx=i%COLS+.5,cy=(i/COLS|0)+.5;
-  if(D.goldEvery){t.gt+=dt*st.lm;if(t.gt>=D.goldEvery){t.gt=0;b.bao+=D.gold;addFx(b,{type:'text',x:cx,y:cy-.3,str:'+'+D.gold+'包',color:'#b7832a',size:.3,life:1,max:1});}}
-  if(D.skill){if(t.sk==null)t.sk=skillCd(b,t)*.6;t.sk-=dt;if(t.sk<=0){t.sk=castSkill(b,t,cx,cy,st)?skillCd(b,t):.3;}}
+ for(let i=0;i<N;i++){const t=cells[i];if(!t)continue;const D=udef(t),st=stats(b,t),cx=i%COLS+.5,cy=(i/COLS|0)+.5,head=isHead(t);
+  if(D.goldEvery&&head){t.gt+=dt*st.lm;if(t.gt>=D.goldEvery){t.gt=0;b.bao+=D.gold;addFx(b,{type:'text',x:cx,y:cy-.3,str:'+'+D.gold+'包',color:'#b7832a',size:.3,life:1,max:1});}}
+  if(D.skill&&head){if(t.sk==null)t.sk=skillCd(b,t)*.6;t.sk-=dt;if(t.sk<=0){t.sk=castSkill(b,t,cx,cy,st)?skillCd(b,t):.3;}}
   if(st.rate>0){t.cd-=dt;if(t.cd<=0){if(attack(b,t,D,st,cx,cy))t.cd=1/st.rate;else t.cd=0;}}
  }
  tickProj(b,dt);
@@ -585,27 +599,27 @@ function aiAct(b,lvl){
  const P=DIFF[lvl||G.diff],cells=b.cells;
  const campIdx=[];for(let i=0;i<b.campCap;i++)if(b.camp[i])campIdx.push(i);
  const em=b.empties();
- // 1) place a camp unit where it forms a word (link or drop-merge)
+ // 1) place a camp char where it completes a word
  if(campIdx.length&&Math.random()<P.smart){let best=null,bs=0;
-  for(const ci of campIdx){const src={z:'c',i:ci};
-   for(const j of em){const r=b.move(src,{z:'b',i:j},true);if(r){const sc=DEF[r.key].cat==='hero'?3:2;if(sc>bs){bs=sc;best=[src,{z:'b',i:j}];}}}
-   for(let j=0;j<N;j++){if(!cells[j])continue;const r=b.move(src,{z:'b',i:j},true);if(r&&r.res!=='up'){const sc=r.res==='part'?1.5:(DEF[r.key].cat==='hero'?3:2);if(sc>bs){bs=sc;best=[src,{z:'b',i:j}];}}}}
-  if(best){b.move(best[0],best[1]);return;}}
- // 2) board pair that forms a word
- if(Math.random()<P.smart*.6){const idx=[];for(let i=0;i<N;i++)if(cells[i])idx.push(i);for(const i of idx)for(const j of idx){if(i===j)continue;const r=b.move({z:'b',i},{z:'b',i:j},true);if(r&&r.res!=='up'){b.move({z:'b',i},{z:'b',i:j});return;}}}
- // 3) camp unit: upgrade onto same, else place
- if(campIdx.length){const ci=campIdx[0],t=b.camp[ci];
-  if(Math.random()<P.merge){for(let j=0;j<N;j++){const u=cells[j];if(u&&u.key===t.key&&u.lv===t.lv&&u.lv<5){b.move({z:'c',i:ci},{z:'b',i:j});return;}}}
-  if(em.length){const keep=P.smart>.7&&isWordish(t)&&DEF[t.key].cat!=='basic'&&b.campFree()>1;if(!keep||em.length>8){b.move({z:'c',i:ci},{z:'b',i:em[Math.floor(Math.random()*em.length)]});return;}}
- }
- // 4) draw
+  for(const ci of campIdx){const src={z:'c',i:ci};for(const j of em){const r=b.move(src,{z:'b',i:j},true);if(r&&r.res==='link'){const sc=DEF[r.key].cat==='hero'?3:2;if(sc>bs){bs=sc;best=[src,{z:'b',i:j}];}}}}
+  if(best){b.move(best[0],best[1]);return;}
+  // place next to a partner char to prepare a word
+  for(const ci of campIdx){const t=b.camp[ci];for(const w of b.avail){const k=w.indexOf(t.key);if(k<0)continue;
+   for(let j=0;j<N;j++){const u=cells[j];if(!u||u.link)continue;const kj=w.indexOf(u.key);if(kj<0||kj===k)continue;const d=k-kj;const c=j%COLS,r=(j/COLS|0);
+    for(const [dc,dr] of [[1,0],[0,1]]){const cc=c+dc*d,rr=r+dr*d;if(cc<0||cc>=COLS||rr<0||rr>=ROWS)continue;const tgt=rr*COLS+cc;if(em.includes(tgt)){b.move({z:'c',i:ci},{z:'b',i:tgt});return;}}}}}}
+ // 2) upgrade onto an identical unlinked char
+ if(campIdx.length&&Math.random()<P.merge){for(const ci of campIdx){const t=b.camp[ci];for(let j=0;j<N;j++){const u=cells[j];if(u&&u.key===t.key&&u.lv===t.lv&&u.lv<5&&(u.link||DEF[t.key].cat==='basic')){b.move({z:'c',i:ci},{z:'b',i:j});return;}}}}
+ // 3) place a camp char
+ if(campIdx.length&&em.length){let ci=campIdx.find(i=>DEF[b.camp[i].key].cat==='basic');if(ci==null&&(b.campFree()===0||em.length>12))ci=campIdx[0];if(ci!=null){b.move({z:'c',i:ci},{z:'b',i:em[Math.floor(Math.random()*em.length)]});return;}}
+ // 4) specials
+ if(Math.random()<P.merge*.5){for(const k of ['shield','logs','drum']){const c=specCost(b,k);if(c!=null&&b.bao>=c+DRAW_COST+2){b.upgradeSpec(k);return;}}}
+ // 5) draw
  if(b.canDraw()){b.draw();return;}
- // 5) upgrade merges on board
- const idx=[];for(let i=0;i<N;i++)if(cells[i])idx.push(i);const pairs=[];
- for(const i of idx)for(const j of idx)if(i<j){const a=cells[i],c=cells[j];if(a.key===c.key&&a.lv===c.lv&&a.lv<5)pairs.push([i,j,a]);}
- if(pairs.length&&(!em.length||Math.random()<P.merge)){const score=p=>p[2].lv*10+(isWordish(p[2])&&DEF[p[2].key].cat!=='basic'?25:0)-(isWordish(p[2])?0:8);pairs.sort((p,q)=>score(p)-score(q));b.move({z:'b',i:pairs[0][0]},{z:'b',i:pairs[0][1]});return;}
- // 6) camp full and nothing to do: discard weakest
- if(!em.length&&b.campFree()===0){let w=-1;for(const ci of campIdx){if(w<0||b.camp[ci].lv<b.camp[w].lv||DEF[b.camp[ci].key].cat==='basic')w=ci;}if(w>=0)b.discard(w);}
+ // 6) upgrade merges among unlinked basics on board
+ const pairs=[];for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){const a=cells[i],c=cells[j];if(a&&c&&!a.link&&!c.link&&a.key===c.key&&a.lv===c.lv&&a.lv<5)pairs.push([i,j,a]);}
+ if(pairs.length&&(!em.length||Math.random()<P.merge)){pairs.sort((p,q)=>p[2].lv-q[2].lv);b.move({z:'b',i:pairs[0][0]},{z:'b',i:pairs[0][1]});return;}
+ // 7) camp full and nothing to do: discard
+ if(!em.length&&b.campFree()===0&&campIdx.length){b.discard(campIdx[0]);}
 }
 function step(dt){
  if(G.over)return;G.t+=dt;
@@ -654,7 +668,8 @@ function getBg(C){const sc=G.scene;const k=sc.id+(G.land?'L':'P')+C.toFixed(2)+'
  const R=srand(sc.id.length*97+7);
  drawDeco(x,sc.deco,W,H,C,R);
  const g=x.createRadialGradient(W/2,H/2,Math.min(W,H)*.3,W/2,H/2,Math.max(W,H)*.75);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(90,64,30,.26)');x.fillStyle=g;x.fillRect(0,0,W,H);
- for(let i=0;i<N;i++){if(PATHSET.has(i))continue;const cx=(i%COLS)*C,cy=(i/COLS|0)*C,p=C*.06;
+ for(const i of BLOCK)drawBlock(x,i,C,sc,R);
+ for(let i=0;i<N;i++){if(PATHSET.has(i)||BLOCK.has(i))continue;const cx=(i%COLS)*C,cy=(i/COLS|0)*C,p=C*.06;
   x.strokeStyle='rgba(176,52,40,.34)';x.lineWidth=1;x.strokeRect(cx+p+.5,cy+p+.5,C-2*p-1,C-2*p-1);
   x.save();x.setLineDash([2,3]);x.strokeStyle='rgba(176,52,40,.13)';x.beginPath();x.moveTo(cx+C/2,cy+p);x.lineTo(cx+C/2,cy+C-p);x.moveTo(cx+p,cy+C/2);x.lineTo(cx+C-p,cy+C/2);x.moveTo(cx+p,cy+p);x.lineTo(cx+C-p,cy+C-p);x.moveTo(cx+C-p,cy+p);x.lineTo(cx+p,cy+C-p);x.stroke();x.restore();}
  const pts=WPS.map(([a,b])=>[(a+.5)*C,(b+.5)*C]);x.lineCap='round';x.lineJoin='round';
@@ -663,6 +678,15 @@ function getBg(C){const sc=G.scene;const k=sc.id+(G.land?'L':'P')+C.toFixed(2)+'
  const s0=posAt(.35);x.fillStyle=sc.foeCol;x.fillRect(s0.x*C-C*.22,s0.y*C-C*.22,C*.44,C*.4);x.fillStyle=PAPER2;x.font=`900 ${C*.28}px ${FONT}`;x.textAlign='center';x.textBaseline='middle';x.fillText(sc.flag,s0.x*C,s0.y*C-C*.02);
  const bp=WPS[WPS.length-1],bx=(bp[0]+.5)*C,by=(bp[1]+.5)*C;x.fillStyle=PAPER2;x.beginPath();x.arc(bx,by,C*.42,0,7);x.fill();x.strokeStyle=SEAL;x.lineWidth=2;x.stroke();x.beginPath();x.arc(bx,by,C*.35,0,7);x.lineWidth=1;x.stroke();x.fillStyle=SEAL;x.font=`900 ${C*.42}px ${FONT}`;x.fillText('斗',bx,by+C*.03);
  bgCache[k]=c;return c;}
+function drawBlock(x,i,C,sc,R){const cx=(i%COLS+.5)*C,cy=((i/COLS|0)+.5)*C;x.save();
+ x.fillStyle='rgba(40,32,24,.10)';x.fillRect(cx-C/2+1,cy-C/2+1,C-2,C-2);
+ const kind={hills:'rock',rocks:'rock',waves:'water',grass:'fence',trees:'tree',flags:'tent'}[sc.deco]||'rock';
+ if(kind==='rock'){x.fillStyle='rgba(52,46,40,.55)';x.beginPath();x.moveTo(cx-C*.38,cy+C*.3);x.lineTo(cx-C*.2,cy-C*.22);x.lineTo(cx+C*.05,cy-C*.32);x.lineTo(cx+C*.3,cy-C*.05);x.lineTo(cx+C*.38,cy+C*.3);x.closePath();x.fill();x.strokeStyle='rgba(243,234,214,.35)';x.lineWidth=1;x.beginPath();x.moveTo(cx-C*.1,cy-C*.2);x.lineTo(cx-C*.02,cy+C*.2);x.stroke();}
+ else if(kind==='water'){x.fillStyle='rgba(46,74,108,.35)';x.beginPath();x.ellipse(cx,cy,C*.42,C*.34,0,0,7);x.fill();x.strokeStyle='rgba(243,234,214,.5)';x.lineWidth=1.2;for(let k=-1;k<=1;k++){x.beginPath();x.moveTo(cx-C*.25,cy+k*C*.12);x.quadraticCurveTo(cx,cy+k*C*.12-C*.06,cx+C*.25,cy+k*C*.12);x.stroke();}}
+ else if(kind==='tree'){x.fillStyle='rgba(30,52,28,.6)';for(const [dx,dy,s] of [[-.15,.05,.28],[.15,-.05,.32]]){x.beginPath();x.moveTo(cx+dx*C,cy+(dy-s)*C);x.lineTo(cx+(dx-s*.7)*C,cy+(dy+s*.6)*C);x.lineTo(cx+(dx+s*.7)*C,cy+(dy+s*.6)*C);x.fill();}}
+ else if(kind==='fence'){x.strokeStyle='rgba(90,64,30,.7)';x.lineWidth=Math.max(2,C*.06);for(let k=-2;k<=2;k++){x.beginPath();x.moveTo(cx+k*C*.15,cy+C*.32);x.lineTo(cx+k*C*.15,cy-C*.28);x.stroke();}x.beginPath();x.moveTo(cx-C*.38,cy-C*.08);x.lineTo(cx+C*.38,cy-C*.08);x.moveTo(cx-C*.38,cy+C*.15);x.lineTo(cx+C*.38,cy+C*.15);x.stroke();}
+ else{x.fillStyle='rgba(150,110,30,.55)';x.beginPath();x.moveTo(cx,cy-C*.34);x.lineTo(cx-C*.38,cy+C*.3);x.lineTo(cx+C*.38,cy+C*.3);x.fill();x.fillStyle='rgba(40,32,24,.5)';x.beginPath();x.moveTo(cx,cy-C*.05);x.lineTo(cx-C*.1,cy+C*.3);x.lineTo(cx+C*.1,cy+C*.3);x.fill();}
+ x.restore();}
 function drawDeco(x,deco,W,H,C,R){x.save();
  if(deco==='hills'){for(let k=0;k<3;k++){x.fillStyle=`rgba(40,34,28,${.05+k*.02})`;x.beginPath();x.moveTo(0,H);let px=0;while(px<W){const h=H*(.25+R()*.3)+k*H*.12;px+=C*(1+R()*1.5);x.lineTo(px-C*.6,H-h);x.lineTo(px,H-h*.6);}x.lineTo(W,H);x.fill();}}
  else if(deco==='waves'){x.strokeStyle='rgba(34,58,84,.12)';x.lineWidth=1.2;for(let y=C*.3;y<H;y+=C*.42){x.beginPath();for(let xx=0;xx<=W;xx+=6){const yy=y+Math.sin(xx/(C*.35)+y)*C*.06;xx?x.lineTo(xx,yy):x.moveTo(xx,yy);}x.stroke();}}
@@ -678,7 +702,7 @@ function tileText(x,key,cx,cy,s,col){x.fillStyle=col;x.textAlign='center';x.text
  if(key.length===1){x.font=`900 ${s*.5}px ${FONT}`;x.fillText(key,cx,cy+s*.02);}
  else if(key.length===2){x.font=`900 ${s*.3}px ${FONT}`;x.fillText(key[0],cx+s*.03,cy-s*.16);x.fillText(key[1],cx+s*.03,cy+s*.18);}
  else{x.font=`900 ${s*.23}px ${FONT}`;x.fillText(key[0],cx+s*.04,cy-s*.23);x.fillText(key[1],cx+s*.04,cy+s*.01);x.fillText(key[2],cx+s*.04,cy+s*.25);}}
-function drawTile(x,t,cx,cy,C,o,b){o=o||{};const D=DEF[t.key];const s=C*.84*(1+(t.pop||0)*.5)*(o.scale||1),X=cx-s/2,Y=cy-s/2;x.save();const A=o.alpha!=null?o.alpha:1;x.globalAlpha=A;
+function drawTile(x,t,cx,cy,C,o,b){o=o||{};const D=t.link?DEF[t.link.w]:DEF[t.key];const head=!t.link||t.link.pos===0;const s=C*.84*(1+(t.pop||0)*.5)*(o.scale||1),X=cx-s/2,Y=cy-s/2;x.save();const A=o.alpha!=null?o.alpha:1;x.globalAlpha=A;
  let bg=PAPER2,fr=INK,txt=INK,fw=Math.max(1.2,s*.05),dash=false;
  if(D.cat==='hero'){bg='#120e0b';fr=RCOL[D.rar];txt=RCOL[D.rar];fw=Math.max(3,s*.13);}
  else if(D.cat==='ployw'){bg='#14202f';fr='#7fa6d6';txt='#c4daf3';fw=Math.max(2.5,s*.1);}
@@ -691,11 +715,11 @@ function drawTile(x,t,cx,cy,C,o,b){o=o||{};const D=DEF[t.key];const s=C*.84*(1+(
  if(D.rar==='SSR'){const g=x.createLinearGradient(X,Y,X+s,Y+s);g.addColorStop(0,'#fff3c4');g.addColorStop(.45,'#f4c84e');g.addColorStop(1,'#a8781c');fr=g;}
  x.strokeStyle=fr;x.lineWidth=fw;if(dash)x.setLineDash([3,3]);rr(x,X+fw/2,Y+fw/2,s-fw,s-fw,s*.09);x.stroke();x.setLineDash([]);
  tileText(x,t.key,cx,cy,s*(D.cat==='hero'?.92:1),txt);
- if(D.cat==='name'){x.fillStyle=SEAL;x.beginPath();x.arc(X+s*.84,Y+s*.16,s*.055,0,7);x.fill();}
+ if(D.cat==='name'&&!t.link){x.fillStyle=SEAL;x.beginPath();x.arc(X+s*.84,Y+s*.16,s*.055,0,7);x.fill();}
  const pip=(D.cat==='hero'||D.cat==='ployw'||D.cat==='squad')?'#fff2c0':SEAL;x.fillStyle=pip;
  for(let l=0;l<t.lv;l++){x.beginPath();x.arc(X+s*(D.cat==='hero'?.2:.15),Y+s*.22+l*s*.13,Math.max(1.1,s*.04),0,7);x.fill();}
- if(b&&D.cat==='hero'){const L=b.loadout[t.key];if(L&&L.weapon){const sig=WDEF[L.weapon].owner===t.key;x.fillStyle=sig?SEAL:GOLD;rr(x,X+s*.66,Y-s*.06,s*.36,s*.26,3);x.fill();x.fillStyle=sig?PAPER2:INK;x.font=`900 ${s*.18}px ${FONT}`;x.textAlign='center';x.textBaseline='middle';x.fillText(sig?'專':'器',X+s*.84,Y+s*.07);}}
- if(D.skill&&t.sk!=null&&o.cdBar!==false&&b){const cd=skillCd(b,t),k=Math.max(0,Math.min(1,1-t.sk/cd));x.fillStyle='rgba(0,0,0,.4)';x.fillRect(X+s*.22,Y+s*.84,s*.56,Math.max(2,s*.05));x.fillStyle=k>=1?'#fff2c0':GOLD;x.fillRect(X+s*.22,Y+s*.84,s*.56*k,Math.max(2,s*.05));}
+ if(b&&D.cat==='hero'&&head){const L=b.loadout[D.key];if(L&&L.weapon){const sig=WDEF[L.weapon].owner===D.key;x.fillStyle=sig?SEAL:GOLD;rr(x,X+s*.66,Y-s*.06,s*.36,s*.26,3);x.fill();x.fillStyle=sig?PAPER2:INK;x.font=`900 ${s*.18}px ${FONT}`;x.textAlign='center';x.textBaseline='middle';x.fillText(sig?'專':'器',X+s*.84,Y+s*.07);}}
+ if(D.skill&&head&&t.sk!=null&&o.cdBar!==false&&b){const cd=skillCd(b,t),k=Math.max(0,Math.min(1,1-t.sk/cd));x.fillStyle='rgba(0,0,0,.4)';x.fillRect(X+s*.22,Y+s*.84,s*.56,Math.max(2,s*.05));x.fillStyle=k>=1?'#fff2c0':GOLD;x.fillRect(X+s*.22,Y+s*.84,s*.56*k,Math.max(2,s*.05));}
  x.restore();}
 function drawEnemy(x,e,C,now){const sc=G.scene;let cx=e.x*C,cy=e.y*C;const moving=e.stunT<=0;const bob=moving?Math.sin(now/110+e.id)*C*.03:0;if(e.kb>0)cy-=e.kb*C*.4;cy+=bob;
  const r=C*(e.boss?.42:e.role===3?.34:.28);
@@ -736,6 +760,9 @@ function drawFx(x,b,C){const W=COLS*C,H=ROWS*C;for(const f of b.fx){const a=Math
  case 'splat':{x.fillStyle='rgba(27,24,21,.5)';for(let k=0;k<7;k++){const an=k*.9+f.x*3,d=f.r*C*(1.25-a*.6);x.beginPath();x.arc(f.x*C+Math.cos(an)*d,f.y*C+Math.sin(an)*d,C*.045*(1+k%3),0,7);x.fill();}break;}
  case 'link':{x.strokeStyle=f.color;x.lineCap='round';x.lineWidth=C*.5*a;x.globalAlpha=a*.55;x.beginPath();f.pts.forEach((p,i)=>i?x.lineTo(p[0]*C,p[1]*C):x.moveTo(p[0]*C,p[1]*C));x.stroke();x.globalAlpha=a;x.lineWidth=3;x.beginPath();x.arc(f.pts[0][0]*C,f.pts[0][1]*C,C*(.5+(1-a)*.9),0,7);x.stroke();break;}
  case 'dash':{const p=1-a,L=PATH_LEN;x.globalAlpha=1;x.strokeStyle='rgba(255,248,226,.92)';x.lineWidth=C*.18;x.lineCap='round';x.beginPath();let first=true;for(let d=Math.max(0,p-.3)*L;d<=p*L;d+=.1){const q=posAt(d);first?x.moveTo(q.x*C,q.y*C):x.lineTo(q.x*C,q.y*C);first=false;}x.stroke();const h=posAt(p*L);drawTile(x,{key:f.key,lv:0,pop:0,id:0},h.x*C,h.y*C,C*.9,{cdBar:false});break;}
+ case 'shield':{const r=C*(1.2+(1-a)*1.8);const g=x.createRadialGradient(f.x*C,f.y*C,r*.3,f.x*C,f.y*C,r);g.addColorStop(0,'rgba(244,200,78,0)');g.addColorStop(.8,'rgba(244,200,78,.35)');g.addColorStop(1,'rgba(244,200,78,0)');x.fillStyle=g;x.beginPath();x.arc(f.x*C,f.y*C,r,0,7);x.fill();x.strokeStyle='rgba(232,178,58,.9)';x.lineWidth=C*.08;x.beginPath();x.arc(f.x*C,f.y*C,r*.85,0,7);x.stroke();break;}
+ case 'drum':{x.strokeStyle='rgba(195,55,43,.45)';x.lineWidth=C*.06;for(let k=0;k<3;k++){x.beginPath();x.arc(W/2,H/2,((1-a)+k*.3)*Math.max(W,H)*.6,0,7);x.stroke();}break;}
+ case 'logs':{const p=1-a,Lp=PATH_LEN;const q=posAt(Lp*(1-p));x.globalAlpha=1;x.fillStyle='#6b4a2a';x.strokeStyle='#3b2814';x.lineWidth=2;x.save();x.translate(q.x*C,q.y*C);x.rotate(p*20);x.fillRect(-C*.38,-C*.13,C*.76,C*.26);x.strokeRect(-C*.38,-C*.13,C*.76,C*.26);x.restore();break;}
  case 'blaze':{x.fillStyle='rgba(230,100,30,.14)';x.fillRect(0,0,W,H);break;}
  case 'wind':{x.strokeStyle='rgba(46,74,108,.35)';x.lineWidth=2;for(let k=0;k<9;k++){const y=(k+.5)*H/9,o=((1-a)*1.6-.3)*W;x.beginPath();x.moveTo(o-W*.3,y);x.quadraticCurveTo(o,y-C*.2,o+W*.2,y);x.stroke();}break;}
  case 'gloom':{x.fillStyle=f.light?'rgba(255,252,240,.25)':'rgba(40,20,60,.22)';x.fillRect(0,0,W,H);break;}
@@ -750,9 +777,11 @@ function render(x,b,C,isMe){if(!b)return;const W=COLS*C,H=ROWS*C,now=performance
  if(b.rallyT>0){x.fillStyle='rgba(240,192,74,.07)';x.fillRect(0,0,W,H);}
  const S=isMe?srcTile():null;const pulse=.55+.45*Math.sin(now/160);
  if(S&&hints){for(const [j,h] of hints.board){if(G.me.cells[j])continue;const px=(j%COLS+.5)*C,py=((j/COLS|0)+.5)*C;x.save();x.globalAlpha=pulse;x.strokeStyle=GOLD;x.setLineDash([4,3]);x.lineWidth=2.5;rr(x,px-C*.44,py-C*.44,C*.88,C*.88,6);x.stroke();x.restore();}}
+ for(let i=0;i<N;i++){const t=b.cells[i];if(!t||!t.link||t.link.pos!==0)continue;const L=t.link,D=DEF[L.w];const col=D.cat==='hero'?RCOL[D.rar]:D.cat==='ployw'?'#7fa6d6':'#e9dec4';const a=L.idx[0],z=L.idx[L.idx.length-1];
+  x.save();x.strokeStyle=col;x.globalAlpha=.55;x.lineCap='round';x.lineWidth=C*.3;x.beginPath();x.moveTo((a%COLS+.5)*C,((a/COLS|0)+.5)*C);x.lineTo((z%COLS+.5)*C,((z/COLS|0)+.5)*C);x.stroke();x.restore();}
  for(let i=0;i<N;i++){const t=b.cells[i];if(!t)continue;let cx=(i%COLS+.5)*C,cy=((i/COLS|0)+.5)*C;
   if(S&&hints&&hints.board.has(i)){x.save();x.strokeStyle=GOLD;x.globalAlpha=pulse;x.lineWidth=3;rr(x,cx-C*.48,cy-C*.48,C*.96,C*.96,7);x.stroke();x.restore();}
-  const D=DEF[t.key];const melee=D.fx==='slash'||D.fx==='thrust'||D.fx==='smash';const at=t.atkT;const k=at<.07?at/.07:at<.22?1-(at-.07)/.15:0;const amp=melee?.2:-.06;
+  const D=t.link?DEF[t.link.w]:DEF[t.key];const melee=D.fx==='slash'||D.fx==='thrust'||D.fx==='smash';const at=t.atkT;const k=at<.07?at/.07:at<.22?1-(at-.07)/.15:0;const amp=melee?.2:-.06;
   cx+=t.adx*k*amp*C;cy+=t.ady*k*amp*C+Math.sin(now/420+t.id*1.7)*C*.018;
   const ghost=isMe&&drag&&drag.moved&&drag.src.z==='b'&&drag.src.i===i;drawTile(x,t,cx,cy,C,{alpha:ghost?.3:1},b);
   if(t.spd&&C>24){x.fillStyle=IND;x.font=`900 ${C*.18}px ${FONT}`;x.textAlign='center';x.fillText('風',cx+C*.36,cy+C*.4);}
@@ -764,7 +793,8 @@ function render(x,b,C,isMe){if(!b)return;const W=COLS*C,H=ROWS*C,now=performance
  const es=b.enemies.slice().sort((p,q)=>(p.boss?1:0)-(q.boss?1:0));for(const e of es)drawEnemy(x,e,C,now);
  for(const p of b.proj)drawProj(x,p,C);
  drawFx(x,b,C);
- if(b.banner){const bn=b.banner,a=Math.min(1,bn.life*2.2),k=1+(1-bn.life/bn.max)*.08;x.save();x.globalAlpha=a;x.translate(W/2,H*.46);x.scale(k,k);const fs=Math.min(C*1.6,W*.86/bn.text.length);x.font=`900 ${fs}px ${FONT}`;x.textAlign='center';x.textBaseline='middle';x.lineWidth=fs*.18;x.strokeStyle='rgba(18,14,11,.88)';x.lineJoin='round';x.strokeText(bn.text,0,0);x.fillStyle=bn.color;x.fillText(bn.text,0,0);x.restore();}
+ {const bp=WPS[WPS.length-1],sp=b.spec.shield;if(sp.lv>0&&C>14){const bx=(bp[0]+.5)*C+C*.38,by=(bp[1]+.5)*C-C*.38,r=C*.16;x.save();x.fillStyle=sp.cd>0?'rgba(60,52,44,.8)':'#e8b23a';x.beginPath();x.moveTo(bx,by-r);x.lineTo(bx+r,by-r*.5);x.lineTo(bx+r*.8,by+r*.6);x.lineTo(bx,by+r*1.1);x.lineTo(bx-r*.8,by+r*.6);x.lineTo(bx-r,by-r*.5);x.closePath();x.fill();if(sp.cd>0){x.strokeStyle='#e8b23a';x.lineWidth=2;x.beginPath();x.arc(bx,by,r*1.5,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-sp.cd/SPECIALS.shield.cd));x.stroke();}x.restore();}}
+ if(b.banner){const bn=b.banner,a=Math.min(1,bn.life*2.2),k=1+(1-bn.life/bn.max)*.08;x.save();x.globalAlpha=a;x.translate(W/2,H*.46);x.scale(k,k);const fs=Math.min(C*1.1,W*.8/bn.text.length);x.font=`900 ${fs}px ${FONT}`;x.textAlign='center';x.textBaseline='middle';x.lineWidth=fs*.18;x.strokeStyle='rgba(18,14,11,.88)';x.lineJoin='round';x.strokeText(bn.text,0,0);x.fillStyle=bn.color;x.fillText(bn.text,0,0);x.restore();}
 }
 function renderCamp(){const b=G.me;if(!b)return;const W=campCv.width/dpr,H=campCv.height/dpr,x=cx2,now=performance.now();x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,W,H);
  const S=srcTile();const pulse=.55+.45*Math.sin(now/160);
@@ -791,9 +821,9 @@ window.addEventListener('resize',()=>{resize();if(bigAi)sizeBigAi();});
 /* ---------- hooks ---------- */
 function toast(msg,kind){const el=document.createElement('div');el.className='toast'+(kind?' '+kind:'');el.textContent=msg;const box=$('toasts');box.appendChild(el);while(box.children.length>3)box.firstChild.remove();setTimeout(()=>el.remove(),2400);}
 HOOK.toast=toast;
-HOOK.word=(b,t,loc,idx)=>{const D=DEF[t.key];if(b!==G.me)return;const col=D.cat==='hero'?RCOL[D.rar]:D.cat==='ployw'?'#7fa6d6':PAPER2;banner(b,t.key,col);
- if(loc&&loc.z==='b'){const pts=(idx||[loc.i]).map(j=>[j%COLS+.5,(j/COLS|0)+.5]);addFx(b,{type:'link',pts,color:col,life:.9,max:.9});addFx(b,{type:'ring',x:pts[0][0],y:pts[0][1],r0:.3,r1:1.6,color:col,life:.7,max:.7,w:.1});}
- toast(`${D.cat==='hero'?`${D.rar} 武將登場`:'成詞'}「${t.key}」${D.skill?'：'+D.skill.name:''}`,D.cat==='hero'?'g':'i');};
+HOOK.word=(b,w,idx)=>{const D=DEF[w];if(b!==G.me)return;const col=D.cat==='hero'?RCOL[D.rar]:D.cat==='ployw'?'#7fa6d6':PAPER2;banner(b,w,col);
+ const pts=idx.map(j=>[j%COLS+.5,(j/COLS|0)+.5]);addFx(b,{type:'link',pts,color:col,life:.9,max:.9});addFx(b,{type:'ring',x:pts[0][0],y:pts[0][1],r0:.3,r1:1.6,color:col,life:.7,max:.7,w:.1});
+ toast(`${D.cat==='hero'?`${D.rar} 武將登場`:'連字成詞'}「${w}」${D.skill?'：'+D.skill.name:''}`,D.cat==='hero'?'g':'i');};
 HOOK.send=b=>toast(b===G.me?'你引一名精兵殺向電腦':'電腦引一名精兵殺向你',b===G.me?'g':'');
 HOOK.refresh=b=>{if(b===G.me)renderTip();};
 HOOK.mission=(b,m)=>{if(b===G.me)toast(`任務完成「${m.name}」：${m.camp?'軍營 +1 格、':''}+${m.bao} 包`,'g');};
@@ -809,7 +839,7 @@ function wchip(w,dim){const W=WDEF[w];return `<span class="chip wpn ${dim?'dim':
 function show(id){$('home').hidden=id!=='home';$('battle').hidden=id!=='battle';}
 function renderHome(){show('home');$('gems').textContent=save.gems;$('record').textContent=save.games?`${save.games} 戰 ${save.wins} 勝`:'首戰';
  const sc=SCENES[save.scene%SCENES.length];$('sceneName').textContent=sc.name;$('sceneSub').textContent=sc.sub;$('sceneMod').textContent=sc.modText?'戰場特性：'+sc.modText:'';
- G.scene=sc;G.land=false;setupPath(sc.wp,false);const pc=$('scenePrev');const pw=70,C=pw/COLS;sizeCanvas(pc,pw,C*ROWS);const px=pc.getContext('2d');px.setTransform(dpr,0,0,dpr,0,0);px.drawImage(getBg(C),0,0,pw,C*ROWS);
+ G.scene=sc;G.land=false;setupPath(sc.wp,false,sc.id);const pc=$('scenePrev');const pw=70,C=pw/COLS;sizeCanvas(pc,pw,C*ROWS);const px=pc.getContext('2d');px.setTransform(dpr,0,0,dpr,0,0);px.drawImage(getBg(C),0,0,pw,C*ROWS);
  $('deckStrip').innerHTML=save.deck.map(d=>chip(d.h,{stars:save.heroes[d.h]||1,w:d.w})).join('');
  document.querySelectorAll('#diffSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.d===diff?'true':'false'));}
 document.querySelectorAll('#diffSeg button').forEach(bt=>bt.onclick=()=>{diff=bt.dataset.d;save.diff=diff;persist();renderHome();});
@@ -827,14 +857,18 @@ function openHelp(tab){
  const tabs=[['rules','玩法'],['codex','詞譜'],['bonds','羈絆']];
  const body=()=>{const b=G.running&&!G.over?G.me:null;const deck=b?new Set(b.deck):new Set(save.deck.map(d=>d.h));const onBoard=b?new Set(b.cells.filter(Boolean).map(t=>t.key)):new Set();
   let h=`<div class="tabs" role="group">${tabs.map(([k,n])=>`<button type="button" data-t="${k}" aria-pressed="${k===tab}">${n}</button>`).join('')}</div>`;
-  if(tab==='rules')h+=`<ol class="rules"><li><b>包</b>：開局有 ${START_BAO} 包，每次抽字用 ${DRAW_COST} 包，一抽五字。每斬 8 敵得 1 包，每波開始得 1 包（首領波 3 包），斬首領 +3 包，完成任務也有包。</li><li><b>軍營</b>：抽到的字先放入戰場下方的軍營。開局 ${CAMP_START} 格，完成任務可加到 ${CAMP_MAX} 格。軍營滿了就抽不到字。</li><li><b>布陣</b>：把字從軍營拖上米字格。場上的字也可拖回軍營收起，或在格與格之間移動。</li><li><b>連字</b>：字在格上<b>由左至右</b>或<b>由上至下</b>相連成名，例如「趙」右邊放「雲」，即合成武將趙雲，三字名如「諸葛亮」排成一行亦可。拖字時，金色虛框就是放下即成詞的位置。</li><li><b>疊字</b>：把字疊在同字同階上升一階（最高五階）；疊在能成詞的字上也會合成。</li><li><b>稀有度</b>：武將 R 紅框、SR 紫框、SSR 金框；戰場只會抽到陣容五員武將的名字。</li><li><b>棄字</b>：點軍營裏的字可放棄，每棄三階字得 1 包。</li><li><b>對戰</b>：你與電腦同受十五波敵軍。每斬 15 敵引一名精兵攻向對手。阿斗血盡即敗；守滿十五波比阿斗血量，再同就比斬敵。</li></ol>`;
+  if(tab==='rules')h+=`<ol class="rules"><li><b>包</b>：開局有 ${START_BAO} 包，每次抽字用 ${DRAW_COST} 包，一抽五字。每斬 8 敵得 1 包，每波開始得 1 包（首領波 3 包），斬首領 +3 包，完成任務也有包。</li><li><b>軍營</b>：抽到的字先放入戰場下方的軍營。開局 ${CAMP_START} 格，完成任務可加到 ${CAMP_MAX} 格。軍營滿了就抽不到字。</li><li><b>布陣</b>：把字從軍營拖上米字格。場上的字也可拖回軍營收起，或在格與格之間移動。</li><li><b>連字</b>：字在格上<b>由左至右</b>或<b>由上至下</b>相連成名即召武將，例如「趙」右邊放「雲」就是趙雲；三字名如「諸葛亮」排成一行亦可。每個字仍佔自己一格，相連的字一齊換上武將的框色和打法，第一個字負責放技能。拖動相連的字，連結就會斷開。拖字時，金色虛框是放下即成詞的位置。</li><li><b>地形</b>：有石、水、樹、柵、營帳的格不能放字。</li><li><b>疊字</b>：把字疊在同字同階上升一階（最高五階）。</li><li><b>特技</b>：按「技」用包升級。仁王盾在敵軍逼近阿斗時自動把敵軍推後，初級 3 秒，每升一級多 1 秒；另有戰鼓、滾木。</li><li><b>稀有度</b>：武將 R 紅框、SR 紫框、SSR 金框；戰場只會抽到陣容五員武將的名字。</li><li><b>棄字</b>：點軍營裏的字可放棄，每棄三階字得 1 包。</li><li><b>對戰</b>：你與電腦同受十五波敵軍。每斬 15 敵引一名精兵攻向對手。阿斗血盡即敗；守滿十五波比阿斗血量，再同就比斬敵。</li></ol>`;
   else if(tab==='bonds')h+=`<p class="lede">羈絆所需單位同時在場即生效。白字是陣容裏有的，紅底是現在場上有的。</p><ul class="list">${SETS.map(s=>{const act=b&&b.sets.has(s.name);return `<li class="item bond${act?' active':''}"><div style="min-width:0"><div class="n">${s.name}${act?'<span class="tag">生效中</span>':''}</div><div class="need">${s.need.map(k=>`<span class="${onBoard.has(k)?'on':deck.has(k)||PLOYS.includes(k)?'deck':''}">${k}</span>`).join('')}</div><div class="d">${s.desc}</div></div></li>`;}).join('')}</ul>`;
   else{const found=b?b.found:new Set();const words=[...HEROES.filter(h=>deck.has(h)),...PLOYS,...SQUADS,...HEROES.filter(h=>!deck.has(h))];
-   h+=`<p class="lede">字在格上相連或相疊即成詞。只有陣容裏的武將能在戰場上召出。</p><ul class="list">${words.map(w=>{const D=DEF[w];const off=D.cat==='hero'&&!deck.has(w);return `<li class="item${off?' off':''}">${chip(w)}<div style="min-width:0"><div><span class="n">${w}</span>${found.has(w)?'<span class="tag">已召</span>':''}${off?'<span class="tag" style="color:var(--dim)">未上陣</span>':''}</div><div class="r">${w.split('').join(' ＋ ')}　${D.rar?D.rar+' · '+D.fac:CATNAME[D.cat]}${D.skill?' · '+D.skill.name:''}</div><div class="d">${D.desc}</div></div></li>`;}).join('')}</ul>`;}
+   h+=`<p class="lede">字在格上由左至右或由上至下相連即成詞，每字各佔一格。只有陣容裏的武將能在戰場上召出。</p><ul class="list">${words.map(w=>{const D=DEF[w];const off=D.cat==='hero'&&!deck.has(w);return `<li class="item${off?' off':''}">${chip(w)}<div style="min-width:0"><div><span class="n">${w}</span>${found.has(w)?'<span class="tag">已召</span>':''}${off?'<span class="tag" style="color:var(--dim)">未上陣</span>':''}</div><div class="r">${w.split('').join(' ＋ ')}　${D.rar?D.rar+' · '+D.fac:CATNAME[D.cat]}${D.skill?' · '+D.skill.name:''}</div><div class="d">${D.desc}</div></div></li>`;}).join('')}</ul>`;}
   return h;};
  const mount=()=>{document.querySelectorAll('#mBody .tabs button').forEach(bt=>bt.onclick=()=>{tab=bt.dataset.t;$('mBody').innerHTML=body();mount();});};
  openModal({rules:'說明',bonds:'羈絆',codex:'詞譜'}[tab],body(),{mount,name:'help'});
 }
+function openSpecs(){const b=G.me;if(!b)return;
+ const body=()=>`<p class="campinfo">現有 ${b.bao} 包。特技全部自動發動，升級用包。</p><ul class="mis">${Object.keys(SPECIALS).map(k=>{const S=SPECIALS[k],sp=b.spec[k],c=specCost(b,k);return `<li class="${sp.lv?'done':''}"><div><div class="n">${S.name} <span class="lvdots">${sp.lv?'●'.repeat(sp.lv)+'○'.repeat(S.max-sp.lv):'未學'}</span></div><div class="d">${S.desc(Math.max(1,sp.lv))}${sp.lv?`；冷卻 ${S.cd} 秒`:''}${sp.lv&&sp.cd>0?`（尚餘 ${Math.ceil(sp.cd)} 秒）`:''}</div>${c!=null?`<div class="d">下一級：${S.desc(sp.lv+1)}</div>`:''}</div>${c==null?'<span class="rw">已滿級</span>':`<button type="button" class="up" data-k="${k}" ${b.bao<c?'disabled':''}>${sp.lv?'升級':'學習'} ${c} 包</button>`}</li>`;}).join('')}</ul>`;
+ const mount=()=>document.querySelectorAll('#mBody .up').forEach(bt=>bt.onclick=()=>{if(b.upgradeSpec(bt.dataset.k))toast(`${SPECIALS[bt.dataset.k].name} 升至 ${b.spec[bt.dataset.k].lv} 級`,'g');$('mBody').innerHTML=body();mount();});
+ openModal('特技',body(),{mount,name:'specs'});}
 function openMissions(){const b=G.me;if(!b)return;
  openModal('任務',`<p class="campinfo">軍營現有 ${b.campCap}／${CAMP_MAX} 格。完成任務可開新格並得包。</p><ul class="mis">${MISSIONS.map(m=>{const d=b.done.has(m.id);return `<li class="${d?'done':''}"><div><div class="n">${d?'已完成　':''}${m.name}</div><div class="d">${m.desc}</div></div><div class="rw">${m.camp?'軍營 +1 格<br>':''}+${m.bao} 包</div></li>`;}).join('')}</ul>`,{name:'missions'});}
 
@@ -891,11 +925,11 @@ function showEnd(){const r=G.result,me=G.me,ai=G.ai;let gain=r==='win'?300+G.wav
  save.gems+=gain;save.games=(save.games||0)+1;if(r==='win')save.wins=(save.wins||0)+1;save.scene=((save.scene||0)+1)%SCENES.length;persist();
  const t=r==='win'?'守住<span class="r">阿斗</span>':r==='lose'?'阿斗<span class="r">失守</span>':'兩軍<span class="r">平手</span>';const nx=SCENES[save.scene];
  openModal(G.scene.name+' 戰報',`<div class="end-big">${t}</div><p class="lede" style="text-align:center">撐到第 ${G.wave} 波。下一戰：${nx.name}（${nx.sub}）</p><div class="end-rows"><div>你　阿斗 <b>${me.hp}</b>　斬 <b>${me.kills}</b><br>召詞 ${me.found.size}・任務 ${me.done.size}</div><div>電腦　阿斗 <b>${ai.hp}</b>　斬 <b>${ai.kills}</b><br>召詞 ${ai.found.size}・任務 ${ai.done.size}</div></div><div class="reward">獲得元寶 <b>+${gain}</b></div><div class="end-btns"><button type="button" class="hbtn" id="eHome">回主畫面</button><button type="button" class="go" id="eNext" style="font-size:19px">下一戰</button></div>`,{name:'end',mount:()=>{$('eHome').onclick=goHome;$('eNext').onclick=startBattle;}});}
-function openMenu(){openModal('軍帳',`<div class="menu-list"><button type="button" class="hbtn" id="m1">說明玩法</button><button type="button" class="hbtn" id="m4">羈絆</button><button type="button" class="hbtn" id="m2">看電腦戰場</button><button type="button" class="hbtn" id="m3">退出這一局（不得元寶）</button></div>`,{name:'menu',mount:()=>{$('m1').onclick=()=>openHelp('rules');$('m4').onclick=()=>openHelp('bonds');$('m2').onclick=openAi;$('m3').onclick=()=>{if(!exitArm){exitArm=true;$('m3').textContent='再按一次確定退出';return;}goHome();};}});}
+function openMenu(){openModal('軍帳',`<div class="menu-list"><button type="button" class="hbtn" id="m1">說明玩法</button><button type="button" class="hbtn" id="m5">詞譜</button><button type="button" class="hbtn" id="m4">羈絆</button><button type="button" class="hbtn" id="m2">看電腦戰場</button><button type="button" class="hbtn" id="m3">退出這一局（不得元寶）</button></div>`,{name:'menu',mount:()=>{$('m1').onclick=()=>openHelp('rules');$('m4').onclick=()=>openHelp('bonds');$('m5').onclick=()=>openHelp('codex');$('m2').onclick=openAi;$('m3').onclick=()=>{if(!exitArm){exitArm=true;$('m3').textContent='再按一次確定退出';return;}goHome();};}});}
 function sizeBigAi(){const cv=$('aiBig');if(!cv)return;const mw=Math.min(window.innerWidth-80,640),mh=window.innerHeight-200;const C=Math.max(12,Math.min(mw/COLS,mh/ROWS));bigAi.C=C;sizeCanvas(cv,COLS*C,ROWS*C);}
 function openAi(){openModal('電腦戰場',`<p class="lede">電腦（${diff}）阿斗 ${G.ai.hp}／20，斬 ${G.ai.kills}，軍營 ${G.ai.campCap} 格。開啟時戰事暫停。</p><canvas id="aiBig"></canvas>`,{name:'ai',mount:()=>{bigAi={cv:$('aiBig'),C:20};sizeBigAi();}});}
 $('menuBtn').onclick=openMenu;$('aiBtn').onclick=openAi;$('aiSide').onclick=openAi;
-$('codexBtn').onclick=()=>openHelp('codex');$('missionBtn').onclick=openMissions;
+$('specBtn').onclick=openSpecs;$('missionBtn').onclick=openMissions;
 function doDraw(){if(!G.running||G.over||G.paused)return;const b=G.me;if(!b.canDraw()){toast(b.campFree()?`包不夠，抽字要 ${DRAW_COST} 包`:'軍營滿了，先把字放上戰場或棄掉','');return;}const n=b.draw();if(n<DRAW_N)toast(`軍營只剩 ${n} 格，只抽到 ${n} 字`,'i');}
 $('drawBtn').onclick=doDraw;
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&!$('battle').hidden&&$('modal').hidden){e.preventDefault();doDraw();}});
@@ -905,11 +939,11 @@ $('pauseBtn').onclick=()=>{if(!G.running||G.over)return;userPaused=!userPaused;G
 
 /* ---------- tip ---------- */
 function renderTip(){const tip=$('tip');const t=(G.me&&selected)?G.me.get(selected):null;if(!t||!G.running){tip.hidden=true;if(selected&&!t)selected=null;return;}
- const D=DEF[t.key],st=stats(G.me,t),inCamp=selected.z==='c';let extra='';
- if(isWordish(t)){const ps=[];for(const w of G.me.avail){if(w.includes(t.key)&&w!==t.key)ps.push(w);}if(ps.length)extra=`<div class="pt">可成：${ps.slice(0,6).join('、')}${ps.length>6?'…':''}</div>`;}
- if(D.cat==='hero'){const L=G.me.loadout[t.key];if(L&&L.weapon)extra+=`<div class="pt">兵器 ${L.weapon}${WDEF[L.weapon].owner===t.key?'（專武）':''}${L.stars>1?'　'+'★'.repeat(L.stars):''}</div>`;}
+ const D=udef(t),st=stats(G.me,t),inCamp=selected.z==='c';let extra='';if(t.link)extra+=`<div class="pt">連字「${t.link.w}」第 ${t.link.pos+1}/${t.link.idx.length} 字${t.link.pos===0&&D.skill?'，負責放技能':''}</div>`;
+ if(!t.link){const ps=[];for(const w of G.me.avail){if(w.includes(t.key)&&w!==t.key)ps.push(w);}if(ps.length)extra=`<div class="pt">可成：${ps.slice(0,6).join('、')}${ps.length>6?'…':''}</div>`;}
+ if(D.cat==='hero'){const L=G.me.loadout[D.key];if(L&&L.weapon)extra+=`<div class="pt">兵器 ${L.weapon}${WDEF[L.weapon].owner===D.key?'（專武）':''}${L.stars>1?'　'+'★'.repeat(L.stars):''}</div>`;}
  const act=inCamp?`<button type="button" class="sbtn" id="tAct">棄字</button>`:`<button type="button" class="sbtn" id="tAct">收回軍營</button>`;
- tip.innerHTML=`${chip(t.key)}<div class="body"><h3>${t.key}<small>${D.rar?D.rar+' · '+D.fac+'將':CATNAME[D.cat]} · 第 ${t.lv} 階${inCamp?' · 在軍營':''}</small></h3><p>${D.desc}</p><div class="nums"><span>傷害 <b>${st.rate>0?Math.round(st.dmg):'—'}</b></span><span>每秒 <b>${st.rate>0?st.rate.toFixed(2):'—'}</b></span><span>射程 <b>${st.range>50?'全圖':st.range>0?st.range.toFixed(1):'—'}</b></span>${D.skill?`<span>技能 <b>${D.skill.name}</b> ${skillCd(G.me,t)}s</span>`:''}</div>${extra}${inCamp?`<div class="pt" style="color:var(--dim)">每棄三階字得 1 包（現 ${G.me.discards}/3）</div>`:''}</div><div class="acts">${act}<button type="button" class="sbtn" id="tClose">收起</button></div>`;
+ tip.innerHTML=`${chip(t.key)}<div class="body"><h3>${t.link?t.key+' · '+t.link.w:t.key}<small>${D.rar?D.rar+' · '+D.fac+'將':CATNAME[D.cat]} · 第 ${t.lv} 階${inCamp?' · 在軍營':''}</small></h3><p>${D.desc}</p><div class="nums"><span>傷害 <b>${st.rate>0?Math.round(st.dmg):'—'}</b></span><span>每秒 <b>${st.rate>0?st.rate.toFixed(2):'—'}</b></span><span>射程 <b>${st.range>50?'全圖':st.range>0?st.range.toFixed(1):'—'}</b></span>${D.skill?`<span>技能 <b>${D.skill.name}</b> ${skillCd(G.me,t)}s</span>`:''}</div>${extra}${inCamp?`<div class="pt" style="color:var(--dim)">每棄三階字得 1 包（現 ${G.me.discards}/3）</div>`:''}</div><div class="acts">${act}<button type="button" class="sbtn" id="tClose">收起</button></div>`;
  tip.hidden=false;
  $('tAct').onclick=()=>{if(!selected)return;if(selected.z==='c'){const g=G.me.discard(selected.i);if(g)toast(`棄字得 ${g} 包`,'g');}else{const r=G.me.stow(selected.i);if(!r)toast('軍營滿了','');}selected=null;hints=null;renderTip();};
  $('tClose').onclick=()=>{selected=null;hints=null;renderTip();};}
@@ -917,17 +951,17 @@ function renderTip(){const tip=$('tip');const t=(G.me&&selected)?G.me.get(select
 /* ---------- input: drag between board and camp ---------- */
 function locAt(px,py){let r=meCv.getBoundingClientRect();if(px>=r.left&&px<r.right&&py>=r.top&&py<r.bottom){const c=Math.floor((px-r.left)/MC),w=Math.floor((py-r.top)/MC);if(c>=0&&c<COLS&&w>=0&&w<ROWS)return {z:'b',i:w*COLS+c};}
  r=campCv.getBoundingClientRect();if(px>=r.left&&px<r.right&&py>=r.top-8&&py<r.bottom+8){const k=Math.floor((px-r.left-campX0)/SC);if(k>=0&&k<CAMP_MAX)return {z:'c',i:k};}return null;}
-function computeHints(src){const b=G.me;const h={board:new Map(),camp:new Map()};for(let j=0;j<N;j++){if(PATHSET.has(j))continue;const r=b.move(src,{z:'b',i:j},true);if(r)h.board.set(j,r);}
+function computeHints(src){const b=G.me;const h={board:new Map(),camp:new Map()};for(let j=0;j<N;j++){if(!isFree(j))continue;const r=b.move(src,{z:'b',i:j},true);if(r)h.board.set(j,r);}
  for(let k=0;k<b.campCap;k++){if(!b.camp[k])continue;const r=b.move(src,{z:'c',i:k},true);if(r)h.camp.set(k,r);}return h;}
 function act(src,dst){const b=G.me;if(!b||G.over)return;if(dst.z==='c'&&dst.i>=b.campCap){toast('這格未開，完成任務可解鎖','');return;}
  const res=b.move(src,dst);if(!res)return;
- if((res==='up'||res==='part')&&dst.z==='b')addFx(b,{type:'ring',x:dst.i%COLS+.5,y:(dst.i/COLS|0)+.5,r0:.2,r1:.8,color:GOLD,life:.4,max:.4,w:.06});
+ if(res==='up'&&dst.z==='b')addFx(b,{type:'ring',x:dst.i%COLS+.5,y:(dst.i/COLS|0)+.5,r0:.2,r1:.8,color:GOLD,life:.4,max:.4,w:.06});
  selected=null;hints=null;renderTip();}
 const ghost=document.createElement('div');ghost.className='ghost';ghost.hidden=true;document.body.appendChild(ghost);
 function startPointer(ev){if(!G.running||G.over||G.paused)return;const loc=locAt(ev.clientX,ev.clientY);if(!loc)return;ev.preventDefault();const b=G.me;const t=b.get(loc);
  if(loc.z==='c'&&loc.i>=b.campCap){openMissions();return;}
  if(t){drag={src:loc,sx:ev.clientX,sy:ev.clientY,moved:false,id:ev.pointerId};try{ev.target.setPointerCapture(ev.pointerId);}catch(e){}}
- else if(selected&&!(loc.z==='b'&&PATHSET.has(loc.i)))act(selected,loc);
+ else if(selected&&!(loc.z==='b'&&!isFree(loc.i)))act(selected,loc);
  else{selected=null;hints=null;renderTip();}}
 meCv.addEventListener('pointerdown',startPointer);campCv.addEventListener('pointerdown',startPointer);
 window.addEventListener('pointermove',ev=>{if(!drag||ev.pointerId!==drag.id)return;if(!drag.moved&&Math.hypot(ev.clientX-drag.sx,ev.clientY-drag.sy)>7){drag.moved=true;hints=computeHints(drag.src);const t=G.me.get(drag.src);ghost.innerHTML=t?chip(t.key):'';ghost.hidden=false;}
@@ -956,7 +990,7 @@ function loop(now){let dt=Math.min(.05,(now-last)/1000);last=now;
 
 /* ---------- boot ---------- */
 renderHome();requestAnimationFrame(loop);
-if(document.fonts&&document.fonts.load){let chars=Object.keys(DEF).join('')+Object.keys(WDEF).join('')+'斗風專器鎖+包−0123456789七進出青龍偃月天下無雙喝斷長坂橋仁德火燒赤壁連營借東閉挾令諸侯鷹視狼顧威震逍遙津拔矢啖睛古之惡來小霸王制衡百騎劫白衣渡江空城計';for(const s of SCENES)chars+=s.foe.join('')+s.boss.join('')+s.flag+s.name;
+if(document.fonts&&document.fonts.load){let chars=Object.keys(DEF).join('')+Object.keys(WDEF).join('')+'斗風專器鎖+包−0123456789仁王盾擂鼓滾木七進出青龍偃月天下無雙喝斷長坂橋仁德火燒赤壁連營借東閉挾令諸侯鷹視狼顧威震逍遙津拔矢啖睛古之惡來小霸王制衡百騎劫白衣渡江空城計';for(const s of SCENES)chars+=s.foe.join('')+s.boss.join('')+s.flag+s.name;
  document.fonts.load(`900 40px "Noto Serif TC"`,chars).then(()=>{for(const k in bgCache)delete bgCache[k];if(!$('home').hidden)renderHome();}).catch(()=>{});}
 })();
 
